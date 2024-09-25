@@ -1,11 +1,11 @@
 # Use linuxserver/faster-whisper as the base image
-FROM linuxserver/faster-whisper
+FROM python:3.12.6
 
 # Install mediainfo
 RUN apt-get update && \
     apt-get install -y mediainfo && \
     apt-get clean && \
-    pip install pymediainfo
+    pip install pymediainfo faster-whisper
 
 # Set working directory
 WORKDIR /app
