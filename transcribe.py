@@ -10,7 +10,7 @@ model_size = os.getenv("WHISPER_MODEL", "large-v3")
 compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 
 # Initialize the Whisper model
-model = WhisperModel(model_size, device="cpu", compute_type=compute_type)
+model = WhisperModel(model_size, device="cpu", compute_type=compute_type, download_root="/models")
 
 # Define directories for recordings, transcriptions, and logseq-transcribe
 recordings_dir = "/recordings"

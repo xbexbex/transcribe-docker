@@ -13,4 +13,5 @@ docker run --name=faster-whisper --rm \
   -v /home/xbexbex/git/transcribe-docker/recordings:/recordings \
   -v /home/xbexbex/git/transcribe-docker/transcriptions:/transcriptions \
   -v /home/xbexbex/git/transcribe-docker/logseq:/logseq \
+  -v /home/xbexbex/git/transcribe-docker/models:/models \
   whisper
