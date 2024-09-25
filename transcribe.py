@@ -2,8 +2,11 @@ import os
 from faster_whisper import WhisperModel
 from pymediainfo import MediaInfo
 
+whisper_model_env = os.getenv("WHISPER_MODEL", "large-v3-int8")
+
 # Initialize the model
-model_size = "large-v3"
+model_size = os.getenv("WHISPER_MODEL_SIZE", "large-v3")
+compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 model = WhisperModel(model_size, device="cpu", compute_type="int8")
 
 # Define directories for recordings and transcriptions
