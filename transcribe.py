@@ -15,10 +15,13 @@ model = WhisperModel(model_size, device="cpu", compute_type=compute_type, downlo
 # Define directories for recordings, transcriptions, and logseq-transcribe
 recordings_dir = "/recordings"
 transcriptions_dir = "/transcriptions"
+recordings_backup_dir = "/recordings_backup"
 logseq_dir = "/logseq"
 
 # Ensure the transcription and logseq-transcribe directories exist
 os.makedirs(transcriptions_dir, exist_ok=True)
+os.makedirs(recordings_dir, exist_ok=True)
+os.makedirs(recordings_backup_dir, exist_ok=True)
 # os.makedirs(logseq_dir, exist_ok=True)
 os.makedirs(os.path.join(logseq_dir, "pages"), exist_ok=True)
 os.makedirs(os.path.join(logseq_dir, "assets"), exist_ok=True)
@@ -112,6 +115,7 @@ def transcribe_files_in_directory():
                 new_file_path, new_file_name = rename_file_as_transcribed(file_path)
                 print(f"Renamed original file to {new_file_path}")
                 shutil.copyfile(new_file_path, os.path.join(logseq_dir, "assets", new_file_name))
+                shutil.copyfile(new_file_path, os.path.join(recordings_backup_dir, new_file_name))
 
 if __name__ == "__main__":
     transcribe_files_in_directory()
