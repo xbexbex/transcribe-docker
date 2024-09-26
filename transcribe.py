@@ -71,6 +71,7 @@ def transcribe_audio(file_path, output_file):
             f.write(f"    - Detected language: {info.language}\n")
             f.write(f"    - Language probability: {info.language_probability}\n")
             f.write(f"    - Model: {model_size}\n")
+            f.write(f"- #unprocessed\n")
             f.write(f"-\n")
             
             f.write("- ")
