@@ -7,7 +7,7 @@ from datetime import datetime
 # Get model size and type from WHISPER_MODEL environment variable
 # Example value for WHISPER_MODEL: "large-v2-float16" or "tiny-int8"
 model_size = os.getenv("WHISPER_MODEL", "large-v3")
-compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "float32")
 
 # Initialize the Whisper model
 model = WhisperModel(model_size, device="cpu", compute_type=compute_type, download_root="/models")
@@ -37,9 +37,9 @@ def get_duration(file_path):
             minutes = (duration_in_seconds % 3600) // 60
             seconds = duration_in_seconds % 60
             if hours > 0:
-                return f"_{hours}h{minutes}m{seconds}s"
+                return f"{hours}h{minutes}m{seconds}s"
             else:
-                return f"_{minutes}m{seconds}s"
+                return f"{minutes}m{seconds}s"
     return ""
 
 def get_renamed_file_dir_and_name(file_path):
@@ -59,7 +59,7 @@ def rename_file_as_transcribed(file_path):
 # Function to transcribe audio files
 def transcribe_audio(file_path, output_file):
     try:
-        segments, info = model.transcribe(file_path, beam_size=5)
+        segments, info = model.transcribe(file_path, beam_size=5, patience=1.5, best_of=7)
         print(f"Detected language '{info.language}' with probability {info.language_probability}")
         
         file_dir, new_file_name = get_renamed_file_dir_and_name(file_path)
@@ -88,15 +88,26 @@ def transcribe_files_in_directory():
             # Ignore hidden files and already transcribed files
             if file.startswith(".") or "(transcribed)" in file:
                 continue
-
+            
             # Process supported audio files
             if file.endswith((".mp3", ".wav", ".flac", ".m4a")):  
                 file_path = os.path.join(root, file)
                 print(f"Processing file: {file_path}")
 
+                file_base_name = os.path.splitext(file)[0]
+                file_date_str, file_time_str = file_base_name.split("_")
+                file_date = datetime.strptime(file_date_str, "%Y-%m-%d")
+
                 # Generate new file name with "r___" prefix and duration suffix
                 duration = get_duration(file_path)
                 new_file_name = f"r___{os.path.splitext(file)[0]}{duration}.md"
+
+                year = file_date.year
+                month = f"{file_date.month:02d}"  # Ensure two digits for month
+                day = f"{file_date.day:02d}"
+
+                time_part = file_time_str.replace("-", ".")
+                new_file_name = f"r___{year}___{month}___{day}  {time_part}  ({duration}).md"
                 output_file_path = os.path.join(transcriptions_dir, new_file_name)
 
                 # Check if the file already exists in /transcriptions
