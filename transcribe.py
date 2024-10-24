@@ -60,7 +60,11 @@ def rename_file_as_transcribed(file_path):
 def transcribe_audio(file_path, output_file):
     try:
         segments, info = model.transcribe(file_path, beam_size=5, patience=1.5, best_of=7)
-        print(f"Detected language '{info.language}' with probability {info.language_probability}")
+        if float(info.language_probability) < 0.91 and info.language != "en":
+            print(f"Detected language '{info.language}' with probability {info.language_probability}. The detected language is likely wrong, transcribing again to english.")
+            segments, info = model.transcribe(file_path, beam_size=5, patience=1.5, best_of=7, language="en")
+        else:
+            print(f"Detected language '{info.language}' with probability {info.language_probability}")
         
         file_dir, new_file_name = get_renamed_file_dir_and_name(file_path)
         # Write the transcription to the markdown file
