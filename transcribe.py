@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from faster_whisper import WhisperModel
 from pymediainfo import MediaInfo
@@ -59,17 +60,18 @@ def rename_file_as_transcribed(file_path):
 # Function to transcribe audio files
 def transcribe_audio(file_path, output_file):
     try:
-        segments, info = model.transcribe(file_path, beam_size=5, patience=1.5, best_of=7)
-        if float(info.language_probability) < 0.91 and info.language != "en":
+        segments, info = model.transcribe(file_path, beam_size=7, patience=1.5, best_of=5)
+        if float(info.language_probability) < 0.9 and info.language != "en":
             print(f"Detected language '{info.language}' with probability {info.language_probability}. The detected language is likely wrong, transcribing again to english.")
             segments, info = model.transcribe(file_path, beam_size=5, patience=1.5, best_of=7, language="en")
+            info.language_probability = "forced"
         else:
             print(f"Detected language '{info.language}' with probability {info.language_probability}")
         
         file_dir, new_file_name = get_renamed_file_dir_and_name(file_path)
         # Write the transcription to the markdown file
         with open(output_file, 'w') as f:
-            f.write(f"- ![2024-09-25_18-50-33.m4a](../assets/{new_file_name})\n")
+            f.write(f"- ![{new_file_name}](../assets/{new_file_name})\n")
             f.write(f"- _metadata_\n")
             f.write(f"  collapsed:: true\n")
             f.write(f"    - Detected language: {info.language}\n")
@@ -85,6 +87,22 @@ def transcribe_audio(file_path, output_file):
     except Exception as e:
         print(f"Error transcribing {file_path}: {e}")
 
+
+def retranscribe_audio_to_language(file_path, language):
+    try:
+        segments, info = model.transcribe(file_path, beam_size=7, patience=1.5, best_of=5, language=language)
+        # Build the transcription text
+        transcription_lines = []
+        transcription_lines.append("- ")
+        for segment in segments:
+            line = f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}\n"
+            transcription_lines.append(line)
+        transcription_text = ''.join(transcription_lines)
+        return transcription_text, info
+    except Exception as e:
+        print(f"Error retranscribing {file_path}: {e}")
+        return None, None
+    
 # Loop through files in the /recordings folder
 def transcribe_files_in_directory():
     for root, dirs, files in os.walk(recordings_dir):
@@ -133,5 +151,165 @@ def transcribe_files_in_directory():
                 shutil.copyfile(new_file_path, os.path.join(logseq_dir, "assets", new_file_name))
                 shutil.copyfile(new_file_path, os.path.join(recordings_backup_dir, new_file_name))
 
+#Function to retranscribe files in the logseq directory based on #retranscribe/(language) tag
+def extract_filename_from_markdown_line(line):
+    # Line is expected to be in the format: '- ![alt_text](../assets/filename)'
+    line = line.strip()
+    if line.startswith('- ![') and '](' in line and line.endswith(')'):
+        # Find positions of '![', ']', '](' and the last ')'
+        start_alt = line.find('![') + 2
+        end_alt = line.find(']', start_alt)
+        start_link = line.find('](', end_alt) + 2
+        end_link = line.rfind(')')
+        link = line[start_link:end_link]
+        # Now, extract filename from link
+        if link.startswith('../assets/'):
+            filename = link[len('../assets/'):]
+        else:
+            filename = link
+        return filename
+    else:
+        return None  # or raise an error
+
+# Function to retranscribe files in the logseq directory based on #retranscribe/(language) tag
+def retranscribe_files_in_logseq():
+    pages_dir = os.path.join(logseq_dir, "pages")
+    for file_name in os.listdir(pages_dir):
+        if not file_name.startswith("r___") or not file_name.endswith(".md"):
+            continue
+        file_path = os.path.join(pages_dir, file_name)
+        with open(file_path, 'r') as f:
+            lines = f.readlines()
+        # Check if file contains '#retranscribe/(language)'
+        retranscribe_line_idx = None
+        retranscribe_language = None
+        for idx, line in enumerate(lines):
+            if '#retranscribe/' in line:
+                retranscribe_line = line.strip()
+                retranscribe_language = retranscribe_line.split('#retranscribe/')[1].strip()
+                retranscribe_line_idx = idx
+                break
+        if retranscribe_language and retranscribe_line_idx is not None:
+            language = retranscribe_language
+            print(f"Retranscribing {file_name} to language '{language}'")
+            # Remove the #retranscribe/ line
+            del lines[retranscribe_line_idx]
+            # Update the metadata block
+            for idx, line in enumerate(lines):
+                if 'Detected language:' in line:
+                    lines[idx] = f"    - Detected language: {language}\n"
+                elif 'Language probability:' in line:
+                    lines[idx] = f"    - Language probability: forced\n"
+            # Find the audio file
+            audio_file_line = None
+            for idx, line in enumerate(lines):
+                if '- ![' in line:
+                    audio_file_line = line.strip()
+                    break
+            if audio_file_line:
+                # Extract audio file name using the new function
+                audio_file_name_in_path = extract_filename_from_markdown_line(audio_file_line)
+                if audio_file_name_in_path:
+                    # The audio file should be in recordings_backup_dir
+                    audio_file_path = os.path.join(recordings_backup_dir, audio_file_name_in_path)
+                    if not os.path.exists(audio_file_path):
+                        print(f"Audio file {audio_file_path} not found in recordings backup directory.")
+                        continue
+                    # Retranscribe the audio file to the specified language
+                    new_transcription, info = retranscribe_audio_to_language(audio_file_path, language)
+                    if new_transcription is None:
+                        print(f"Failed to retranscribe {audio_file_name_in_path}")
+                        continue
+                    # Find the start and end of the transcription block
+                    # The transcription block starts with '- [' and ends when the pattern no longer matches
+                    transcription_start_idx = None
+                    for idx, line in enumerate(lines):
+                        if re.match(r'- \[.*?\s->\s.*?\]', line.strip()):
+                            transcription_start_idx = idx
+                            break
+                    if transcription_start_idx is None:
+                        print(f"Could not find transcription block in {file_name}")
+                        continue
+                    # Find the end of the transcription block
+                    transcription_end_idx = transcription_start_idx + 1
+                    for idx in range(transcription_start_idx + 1, len(lines)):
+                        if not re.match(r'\[.*?\s->\s.*?\]', lines[idx].strip()):
+                            transcription_end_idx = idx
+                            break
+                    else:
+                        transcription_end_idx = len(lines)
+                    # Build the new content
+                    new_lines = lines[:transcription_start_idx]
+                    # Add the new transcription
+                    new_lines.append(new_transcription)
+                    # Add the remaining lines
+                    new_lines.extend(lines[transcription_end_idx:])
+                    # Write the updated content back to the file
+                    with open(file_path, 'w') as f:
+                        f.writelines(new_lines)
+                    print(f"Updated transcription in {file_path}")
+                    # Also update the corresponding file in the transcriptions directory
+                    transcription_file_path = os.path.join(transcriptions_dir, file_name)
+                    if os.path.exists(transcription_file_path):
+                        # The code to update the transcription file is similar
+                        with open(transcription_file_path, 'r') as f:
+                            transcription_lines = f.readlines()
+                        # Remove the #retranscribe/ line if it exists
+                        retranscribe_line_idx_transcription = None
+                        for idx, line in enumerate(transcription_lines):
+                            if '#retranscribe/' in line:
+                                retranscribe_line_idx_transcription = idx
+                                break
+                        if retranscribe_line_idx_transcription is not None:
+                            del transcription_lines[retranscribe_line_idx_transcription]
+                        # Update the metadata block
+                        for idx, line in enumerate(transcription_lines):
+                            if 'Detected language:' in line:
+                                transcription_lines[idx] = f"    - Detected language: {language}\n"
+                            elif 'Language probability:' in line:
+                                transcription_lines[idx] = f"    - Language probability: forced\n"
+                        # Find the transcription block
+                        transcription_start_idx_transcription = None
+                        for idx, line in enumerate(transcription_lines):
+                            if re.match(r'- \[.*?\s->\s.*?\]', line.strip()):
+                                transcription_start_idx_transcription = idx
+                                break
+                        if transcription_start_idx_transcription is not None:
+                            # Find the end of the transcription block
+                            transcription_end_idx_transcription = transcription_start_idx_transcription + 1
+                            for idx in range(transcription_start_idx_transcription + 1, len(transcription_lines)):
+                                if not re.match(r'\[.*?\s->\s.*?\]', transcription_lines[idx].strip()):
+                                    transcription_end_idx_transcription = idx
+                                    break
+                            else:
+                                transcription_end_idx_transcription = len(transcription_lines)
+                            # Build the new content
+                            new_transcription_lines = transcription_lines[:transcription_start_idx_transcription]
+                            new_transcription_lines.append(new_transcription)
+                            new_transcription_lines.extend(transcription_lines[transcription_end_idx_transcription:])
+                            # Write the updated content back to the transcription file
+                            with open(transcription_file_path, 'w') as f:
+                                f.writelines(new_transcription_lines)
+                            print(f"Updated transcription in {transcription_file_path}")
+                        else:
+                            print(f"Could not find transcription block in {transcription_file_path}")
+                    else:
+                        print(f"Corresponding transcription file {transcription_file_path} not found. Copying from pages directory.")
+                        # Copy the pages file to the transcriptions directory
+                        shutil.copyfile(file_path, transcription_file_path)
+                        print(f"Copied {file_path} to {transcription_file_path}")
+                else:
+                    print(f"Could not parse audio file line in {file_name}")
+            else:
+                print(f"Audio file line not found in {file_name}")
+        else:
+            # No retranscribe tag found
+            continue
+
 if __name__ == "__main__":
     transcribe_files_in_directory()
+    retranscribe_files_in_logseq()
+
+if __name__ == "__main__":
+    transcribe_files_in_directory()
+    retranscribe_files_in_logseq()
