@@ -60,10 +60,10 @@ def rename_file_as_transcribed(file_path):
 # Function to transcribe audio files
 def transcribe_audio(file_path, output_file):
     try:
-        segments, info = model.transcribe(file_path, beam_size=7, patience=1.5, best_of=5)
+        segments, info = model.transcribe(file_path, beam_size=7, patience=1.5, best_of=5, task="transcribe")
         if float(info.language_probability) < 0.9 and info.language != "en":
             print(f"Detected language '{info.language}' with probability {info.language_probability}. The detected language is likely wrong, transcribing again to english.")
-            segments, info = model.transcribe(file_path, beam_size=5, patience=1.5, best_of=7, language="en")
+            segments, info = model.transcribe(file_path, beam_size=5, patience=1.5, best_of=7, task="transcribe", language="en")
             info.language_probability = "forced"
         else:
             print(f"Detected language '{info.language}' with probability {info.language_probability}")
@@ -90,7 +90,7 @@ def transcribe_audio(file_path, output_file):
 
 def retranscribe_audio_to_language(file_path, language):
     try:
-        segments, info = model.transcribe(file_path, beam_size=7, patience=1.5, best_of=5, language=language)
+        segments, info = model.transcribe(file_path, beam_size=7, patience=1.5, best_of=5, language=language, task="transcribe")
         # Build the transcription text
         transcription_lines = []
         transcription_lines.append("- ")
