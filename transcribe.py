@@ -47,7 +47,7 @@ def get_renamed_file_dir_and_name(file_path):
     file_dir, file_name = os.path.split(file_path)
 
     if "retranscribe" in file_name:
-        file_name = file_name.replace(" (retranscribe)", "").replace("(retranscribe)", "")
+        file_name = remove_retranscribe_from_str(file_name)
         
     name, ext = os.path.splitext(file_name)
     new_name = f"{name} (transcribed){ext}"
@@ -106,6 +106,10 @@ def retranscribe_audio_to_language(file_path, language):
         print(f"Error retranscribing {file_path}: {e}")
         return None, None
     
+def remove_retranscribe_from_str(s):
+    s = s.replace(" (retranscribe)", "").replace("(retranscribe)", "").replace(" (retranscribed)", "").replace("(retranscribed)", "")
+    return s
+
 # Loop through files in the /recordings folder
 def transcribe_files_in_directory():
     for root, dirs, files in os.walk(recordings_dir):
@@ -121,7 +125,9 @@ def transcribe_files_in_directory():
 
                 retranscribe = False
                 if "retranscribe" in file:
+                    print("The file is going to be retranscribed")
                     retranscribe = True
+                    file = remove_retranscribe_from_str(file)
 
                 file_base_name = os.path.splitext(file)[0]
                 file_date_str, file_time_str = file_base_name.split("_")
@@ -130,11 +136,7 @@ def transcribe_files_in_directory():
                 # Generate new file name with "r___" prefix and duration suffix
                 duration = get_duration(file_path)
 
-                new_file_name = f"r___{os.path.splitext(file)[0]}{duration}.md"
-
-                if retranscribe:
-                    edited_file = file.replace(" (retranscribe)", "").replace("(retranscribe)", "")
-                    new_file_name = f"r___{os.path.splitext(edited_file)[0]}{duration}.md"
+                transcription_file_name = f"r___{os.path.splitext(file)[0]}{duration}.md"
 
 
                 year = file_date.year
@@ -142,42 +144,42 @@ def transcribe_files_in_directory():
                 day = f"{file_date.day:02d}"
 
                 time_part = file_time_str.replace("-", ".")
-                new_file_name = f"r___{year}___{month}___{day}  {time_part}  ({duration}).md"
-                output_file_path = os.path.join(transcriptions_dir, new_file_name)
+                transcription_file_name = f"r___{year}___{month}___{day}  {time_part}  ({duration}).md"
+                transcription_file_path = os.path.join(transcriptions_dir, transcription_file_name)
 
                 # Check if the file already exists in /transcriptions
-                if os.path.exists(output_file_path):
+                if os.path.exists(transcription_file_path) and not retranscribe:
                     print(f"Skipping {file_path}, transcription already exists.")
                 else:
                     # Transcribe and save the output to the .md file
-                    transcribe_audio(file_path, output_file_path)
+                    transcribe_audio(file_path, transcription_file_path)
 
                 # Copy the file to /logseq-transcribe
-                logseq_output_file_path = os.path.join(logseq_dir, "pages", new_file_name)
-                if (not os.path.exists(logseq_output_file_path)) or retranscribe:
-                    shutil.copyfile(output_file_path, logseq_output_file_path)
+                logseq_transcription_file_path = os.path.join(logseq_dir, "pages", transcription_file_name)
+                if (not os.path.exists(logseq_transcription_file_path)) or retranscribe:
+                    shutil.copyfile(transcription_file_path, logseq_transcription_file_path)
                 else:
-                    print(f"Transcription already exists in pages: {logseq_output_file_path}")
+                    print(f"Transcription already exists in pages: {logseq_transcription_file_path}")
                 
-                renamed_file_dir, renamed_file_name = get_renamed_file_dir_and_name(file_path)
-                new_file_path = os.path.join(renamed_file_dir, renamed_file_name)
+                new_recording_file_dir, new_recording_file_name = get_renamed_file_dir_and_name(file_path)
+                new_recording_file_path = os.path.join(new_recording_file_dir, new_recording_file_name)
 
                 # Rename the original file by appending (transcribed)
-                if (not os.path.exists(new_file_path)) or retranscribe:
-                    rename_file_as_transcribed(file_path, new_file_path)
-                    print(f"Renamed original file to {new_file_path}")
+                if (not os.path.exists(new_recording_file_path)) or retranscribe:
+                    rename_file_as_transcribed(file_path, new_recording_file_path)
+                    print(f"Renamed original file to {new_recording_file_path}")
                 
-                logseq_asset_file_path = os.path.join(logseq_dir, "assets", new_file_name)
+                logseq_asset_file_path = os.path.join(logseq_dir, "assets", new_recording_file_name)
                 if (not os.path.exists(logseq_asset_file_path)) or retranscribe:
-                    shutil.copyfile(new_file_path, logseq_asset_file_path)
+                    shutil.copyfile(transcription_file_path, logseq_asset_file_path)
                 else:
                     print(f"File already exists in assets: {logseq_asset_file_path}")
 
-                record_backup_file_path = os.path.join(recordings_backup_dir, new_file_name)
+                record_backup_file_path = os.path.join(recordings_backup_dir, new_recording_file_name)
                 if (not os.path.exists(record_backup_file_path)) or retranscribe:
-                    shutil.copyfile(new_file_path, record_backup_file_path)
+                    shutil.copyfile(new_recording_file_path, record_backup_file_path)
                 else:
-                    print(f"Transcription already exists in backup folder: {record_backup_file_path}")
+                    print(f"File already exists in backup folder: {record_backup_file_path}")
 
 #Function to retranscribe files in the logseq directory based on #retranscribe/(language) tag
 def extract_filename_from_markdown_line(line):
