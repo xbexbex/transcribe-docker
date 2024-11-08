@@ -45,17 +45,18 @@ def get_duration(file_path):
 
 def get_renamed_file_dir_and_name(file_path):
     file_dir, file_name = os.path.split(file_path)
+
+    if "retranscribe" in file_name:
+        file_name = file_name.replace(" (retranscribe)", "").replace("(retranscribe)", "")
+        
     name, ext = os.path.splitext(file_name)
     new_name = f"{name} (transcribed){ext}"
 
     return file_dir, new_name
 
 # Function to rename the original audio file by appending (transcribed)
-def rename_file_as_transcribed(file_path):
-    file_dir, file_name = get_renamed_file_dir_and_name(file_path)
-    new_file_path = os.path.join(file_dir, file_name)
+def rename_file_as_transcribed(file_path, new_file_path):
     os.rename(file_path, new_file_path)
-    return new_file_path, file_name
 
 # Function to transcribe audio files
 def transcribe_audio(file_path, output_file):
@@ -118,13 +119,23 @@ def transcribe_files_in_directory():
                 file_path = os.path.join(root, file)
                 print(f"Processing file: {file_path}")
 
+                retranscribe = False
+                if "retranscribe" in file:
+                    retranscribe = True
+
                 file_base_name = os.path.splitext(file)[0]
                 file_date_str, file_time_str = file_base_name.split("_")
                 file_date = datetime.strptime(file_date_str, "%Y-%m-%d")
 
                 # Generate new file name with "r___" prefix and duration suffix
                 duration = get_duration(file_path)
+
                 new_file_name = f"r___{os.path.splitext(file)[0]}{duration}.md"
+
+                if retranscribe:
+                    edited_file = file.replace(" (retranscribe)", "").replace("(retranscribe)", "")
+                    new_file_name = f"r___{os.path.splitext(edited_file)[0]}{duration}.md"
+
 
                 year = file_date.year
                 month = f"{file_date.month:02d}"  # Ensure two digits for month
@@ -137,21 +148,36 @@ def transcribe_files_in_directory():
                 # Check if the file already exists in /transcriptions
                 if os.path.exists(output_file_path):
                     print(f"Skipping {file_path}, transcription already exists.")
-                    continue
-
-                # Transcribe and save the output to the .md file
-                transcribe_audio(file_path, output_file_path)
+                else:
+                    # Transcribe and save the output to the .md file
+                    transcribe_audio(file_path, output_file_path)
 
                 # Copy the file to /logseq-transcribe
                 logseq_output_file_path = os.path.join(logseq_dir, "pages", new_file_name)
-                shutil.copyfile(output_file_path, logseq_output_file_path)
-                print(f"Copied transcription to {logseq_output_file_path}")
+                if (not os.path.exists(logseq_output_file_path)) or retranscribe:
+                    shutil.copyfile(output_file_path, logseq_output_file_path)
+                else:
+                    print(f"Transcription already exists in pages: {logseq_output_file_path}")
+                
+                renamed_file_dir, renamed_file_name = get_renamed_file_dir_and_name(file_path)
+                new_file_path = os.path.join(renamed_file_dir, renamed_file_name)
 
                 # Rename the original file by appending (transcribed)
-                new_file_path, new_file_name = rename_file_as_transcribed(file_path)
-                print(f"Renamed original file to {new_file_path}")
-                shutil.copyfile(new_file_path, os.path.join(logseq_dir, "assets", new_file_name))
-                shutil.copyfile(new_file_path, os.path.join(recordings_backup_dir, new_file_name))
+                if (not os.path.exists(new_file_path)) or retranscribe:
+                    rename_file_as_transcribed(file_path, new_file_path)
+                    print(f"Renamed original file to {new_file_path}")
+                
+                logseq_asset_file_path = os.path.join(logseq_dir, "assets", new_file_name)
+                if (not os.path.exists(logseq_asset_file_path)) or retranscribe:
+                    shutil.copyfile(new_file_path, logseq_asset_file_path)
+                else:
+                    print(f"File already exists in assets: {logseq_asset_file_path}")
+
+                record_backup_file_path = os.path.join(recordings_backup_dir, new_file_name)
+                if (not os.path.exists(record_backup_file_path)) or retranscribe:
+                    shutil.copyfile(new_file_path, record_backup_file_path)
+                else:
+                    print(f"Transcription already exists in backup folder: {record_backup_file_path}")
 
 #Function to retranscribe files in the logseq directory based on #retranscribe/(language) tag
 def extract_filename_from_markdown_line(line):
