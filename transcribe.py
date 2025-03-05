@@ -11,6 +11,7 @@ from datetime import datetime
 # Example value for WHISPER_MODEL: "large-v2-float16" or "tiny-int8"
 model_size = os.getenv("WHISPER_MODEL", "large-v3")
 compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "float32")
+reprocess_unprocessed = os.getenv("REPROCESS_UNPROCESSED", "false").lower() in ["true", "1"]
 
 # Initialize the Whisper model
 model = WhisperModel(model_size, device="cpu", compute_type=compute_type, download_root="/models")
@@ -63,11 +64,11 @@ def rename_file_as_transcribed(file_path, new_file_path):
 # Function to transcribe audio files
 def transcribe_audio(file_path, output_file):
     try:
-        segments, info = model.transcribe(file_path, beam_size=7, patience=1.5, best_of=5, task="transcribe")
+        segments, info = model.transcribe(file_path, beam_size=5, best_of=5, task="transcribe")
         probability = None
         if float(info.language_probability) < 0.9 and info.language != "en":
             print(f"Detected language '{info.language}' with probability {info.language_probability}. The detected language is likely wrong, transcribing again to english.")
-            segments, info = model.transcribe(file_path, beam_size=5, patience=1.5, best_of=7, task="transcribe", language="en")
+            segments, info = model.transcribe(file_path, beam_size=5, best_of=5, task="transcribe", language="en")
             probability = "forced"
         else:
             print(f"Detected language '{info.language}' with probability {info.language_probability}")
@@ -95,7 +96,7 @@ def transcribe_audio(file_path, output_file):
 
 def retranscribe_audio_to_language(file_path, language):
     try:
-        segments, info = model.transcribe(file_path, beam_size=7, patience=1.5, best_of=5, language=language, task="transcribe")
+        segments, info = model.transcribe(file_path, beam_size=5, patience=1, best_of=5, language=language, task="transcribe")
         # Build the transcription text
         transcription_lines = []
         transcription_lines.append("- ")
@@ -217,17 +218,31 @@ def retranscribe_files_in_logseq():
         # Check if file contains '#retranscribe/(language)'
         retranscribe_line_idx = None
         retranscribe_language = None
+        unprocessed_line_idx = None
+
         for idx, line in enumerate(lines):
-            if '#retranscribe/' in line:
+            if reprocess_unprocessed and '#unprocessed' in line:
+                unprocessed_line_idx = idx
+                retranscribe_language = "en"
+            if '#retranscribe' in line:
                 retranscribe_line = line.strip()
-                retranscribe_language = retranscribe_line.split('#retranscribe/')[1].strip()
                 retranscribe_line_idx = idx
+
+                if '/' in retranscribe_line and len(retranscribe_line.split('#retranscribe/')[1].strip()) > 0:
+                    retranscribe_language = retranscribe_line.split('#retranscribe/')[1].strip()
+                else:
+                    retranscribe_language = "en"
+                    print(f"No language specified in retranscribe tag, defaulting to English (en)")
+
                 break
-        if retranscribe_language and retranscribe_line_idx is not None:
+
+        if retranscribe_language is not None and (retranscribe_line_idx is not None or unprocessed_line_idx is not None):
             language = retranscribe_language
             print(f"Retranscribing {file_name} to language '{language}'")
             # Remove the #retranscribe/ line
-            del lines[retranscribe_line_idx]
+
+            if retranscribe_line_idx is not None:
+                del lines[retranscribe_line_idx]
             # Update the metadata block
             for idx, line in enumerate(lines):
                 if 'Detected language:' in line:
@@ -247,8 +262,22 @@ def retranscribe_files_in_logseq():
                     # The audio file should be in recordings_backup_dir
                     audio_file_path = os.path.join(recordings_backup_dir, audio_file_name_in_path)
                     if not os.path.exists(audio_file_path):
-                        print(f"Audio file {audio_file_path} not found in recordings backup directory.")
-                        continue
+                        print(f"Audio file {audio_file_path} not found in recordings backup directory. Trying the recordings directory.")
+                        
+                        audio_file_path = os.path.join(recordings_dir, audio_file_name_in_path)
+                        if not os.path.exists(audio_file_path):
+                            print(f"Audio file {audio_file_path} not found in recordings directory. Trying the logseq assets directory.")
+                            audio_file_path = os.path.join(logseq_dir, "assets", audio_file_name_in_path)
+                            if not os.path.exists(audio_file_path):
+                                print(f"Audio file {audio_file_path} not found in logseq assets directory. Skipping {file_name}")
+                                continue
+                            else:
+                                shutil.copyfile(audio_file_path, os.path.join(recordings_backup_dir, audio_file_name_in_path))
+                                print(f"Copied {audio_file_path} to {os.path.join(recordings_backup_dir, audio_file_name_in_path)}")
+                        else:
+                            shutil.copyfile(audio_file_path, os.path.join(recordings_backup_dir, audio_file_name_in_path))
+                            print(f"Copied {audio_file_path} to {os.path.join(recordings_backup_dir, audio_file_name_in_path)}")
+
                     # Retranscribe the audio file to the specified language
                     new_transcription, info = retranscribe_audio_to_language(audio_file_path, language)
                     if new_transcription is None:
@@ -341,8 +370,8 @@ def retranscribe_files_in_logseq():
             continue
 
 if __name__ == "__main__":
-    print("Starting transcription...")
+    retranscribe_files_in_logseq()
+    print("Starting transcription for new recordings...")
     transcribe_files_in_directory()
     print("Transcription complete.")
-    retranscribe_files_in_logseq()
     print("Done.")
