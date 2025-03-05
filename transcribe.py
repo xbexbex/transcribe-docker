@@ -96,7 +96,7 @@ def transcribe_audio(file_path, output_file):
 
 def retranscribe_audio_to_language(file_path, language):
     try:
-        segments, info = model.transcribe(file_path, beam_size=5, patience=1, best_of=5, language=language, task="transcribe")
+        segments, info = model.transcribe(file_path, beam_size=5, best_of=5, language=language, task="transcribe")
         # Build the transcription text
         transcription_lines = []
         transcription_lines.append("- ")
