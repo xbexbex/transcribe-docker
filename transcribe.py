@@ -1,3 +1,5 @@
+print("Loading imports...")
+ 
 import os
 import re
 import shutil
@@ -112,6 +114,7 @@ def remove_retranscribe_from_str(s):
 
 # Loop through files in the /recordings folder
 def transcribe_files_in_directory():
+    print("Transcribing files in the recordings directory...")
     for root, dirs, files in os.walk(recordings_dir):
         for file in files:
             # Ignore hidden files and already transcribed files
@@ -204,6 +207,7 @@ def extract_filename_from_markdown_line(line):
 # Function to retranscribe files in the logseq directory based on #retranscribe/(language) tag
 def retranscribe_files_in_logseq():
     pages_dir = os.path.join(logseq_dir, "pages")
+    print(f"Checking for files to retranscribe in {pages_dir}")
     for file_name in os.listdir(pages_dir):
         if not file_name.startswith("r___") or not file_name.endswith(".md"):
             continue
@@ -337,9 +341,8 @@ def retranscribe_files_in_logseq():
             continue
 
 if __name__ == "__main__":
+    print("Starting transcription...")
     transcribe_files_in_directory()
+    print("Transcription complete.")
     retranscribe_files_in_logseq()
-
-if __name__ == "__main__":
-    transcribe_files_in_directory()
-    retranscribe_files_in_logseq()
+    print("Done.")

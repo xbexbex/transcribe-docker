@@ -20,4 +20,4 @@ COPY transcribe.py /app/transcribe.py
 RUN chmod +x /app/transcribe.py
 
 # Default command to run the transcription script
-CMD [ "python3", "/app/transcribe.py" ]
+CMD [ "python3", "-u", "/app/transcribe.py" ]
