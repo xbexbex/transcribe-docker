@@ -173,11 +173,11 @@ def transcribe_files_in_directory():
                     rename_file_as_transcribed(file_path, new_recording_file_path)
                     print(f"Renamed original file to {new_recording_file_path}")
                 
-                logseq_asset_file_path = os.path.join(logseq_dir, "assets", new_recording_file_name)
-                if (not os.path.exists(logseq_asset_file_path)) or retranscribe:
-                    shutil.copyfile(new_recording_file_path, logseq_asset_file_path)
-                else:
-                    print(f"File already exists in assets: {logseq_asset_file_path}")
+                # logseq_asset_file_path = os.path.join(logseq_dir, "assets", new_recording_file_name)
+                # if (not os.path.exists(logseq_asset_file_path)) or retranscribe:
+                #     shutil.copyfile(new_recording_file_path, logseq_asset_file_path)
+                # else:
+                #     print(f"File already exists in assets: {logseq_asset_file_path}")
 
                 record_backup_file_path = os.path.join(recordings_backup_dir, new_recording_file_name)
                 if (not os.path.exists(record_backup_file_path)) or retranscribe:
