@@ -21,6 +21,7 @@ recordings_dir = "/recordings"
 transcriptions_dir = "/transcriptions"
 recordings_backup_dir = "/recordings_backup"
 logseq_dir = "/logseq"
+obsidian_dir = "/obsidian"
 
 # Ensure the transcription and logseq-transcribe directories exist
 os.makedirs(transcriptions_dir, exist_ok=True)
@@ -29,6 +30,8 @@ os.makedirs(recordings_backup_dir, exist_ok=True)
 # os.makedirs(logseq_dir, exist_ok=True)
 os.makedirs(os.path.join(logseq_dir, "pages"), exist_ok=True)
 os.makedirs(os.path.join(logseq_dir, "assets"), exist_ok=True)
+os.makedirs(obsidian_dir, exist_ok=True)
+os.makedirs(os.path.join(obsidian_dir, "r"), exist_ok=True)
 
 # Function to get the media duration in (XhYmZs) format
 def get_duration(file_path):
@@ -164,6 +167,18 @@ def transcribe_files_in_directory():
                     shutil.copyfile(transcription_file_path, logseq_transcription_file_path)
                 else:
                     print(f"Transcription already exists in pages: {logseq_transcription_file_path}")
+
+                # Mirror the transcription into the Obsidian vault using the same naming pattern
+                obsidian_parent_dir = os.path.join(obsidian_dir, "r", str(year), month)
+                os.makedirs(obsidian_parent_dir, exist_ok=True)
+
+                obsidian_file_name = f"{day} {time_part} ({duration}).md"
+                obsidian_file_path = os.path.join(obsidian_parent_dir, obsidian_file_name)
+
+                if (not os.path.exists(obsidian_file_path)) or retranscribe:
+                    shutil.copyfile(transcription_file_path, obsidian_file_path)
+                else:
+                    print(f"Transcription already exists in Obsidian: {obsidian_file_path}")
                 
                 new_recording_file_dir, new_recording_file_name = get_renamed_file_dir_and_name(file_path)
                 new_recording_file_path = os.path.join(new_recording_file_dir, new_recording_file_name)
