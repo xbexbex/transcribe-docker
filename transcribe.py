@@ -64,21 +64,66 @@ def get_renamed_file_dir_and_name(file_path):
 def rename_file_as_transcribed(file_path, new_file_path):
     os.rename(file_path, new_file_path)
 
+def filter_segments(segments):
+    filtered = []
+    for s in segments:
+        dur = s.end - s.start
+        text = s.text.strip()
+
+        # drop tiny nonsense chunks
+        if dur < 0.6 and len(text) < 3:
+            continue
+
+        # skip segments the model thinks are probably silence
+        if getattr(s, "no_speech_prob", None) is not None and s.no_speech_prob > 0.8:
+            continue
+
+        # skip low-confidence babble
+        if getattr(s, "avg_logprob", None) is not None and s.avg_logprob < -1.0:
+            continue
+
+        filtered.append(s)
+    return filtered
+
+
 # Function to transcribe audio files
 def transcribe_audio(file_path, output_file):
     try:
-        segments, info = model.transcribe(file_path, beam_size=5, best_of=5, task="transcribe")
+        segments, info = model.transcribe(
+            file_path,
+            task="transcribe",
+            beam_size=5,
+            best_of=5,
+            vad_filter=True,
+            no_speech_threshold=0.4,
+            log_prob_threshold=-0.5,
+            temperature=0.0,
+        )
+
+        segments = filter_segments(segments)
+
         probability = None
         if float(info.language_probability) < 0.9 and info.language != "en":
             print(f"Detected language '{info.language}' with probability {info.language_probability}. The detected language is likely wrong, transcribing again to english.")
-            segments, info = model.transcribe(file_path, beam_size=5, best_of=5, task="transcribe", language="en")
+            segments, info = model.transcribe(
+                file_path,
+                task="transcribe",
+                language="en",
+                beam_size=5,
+                best_of=5,
+                vad_filter=True,
+                no_speech_threshold=0.4,
+                log_prob_threshold=-0.5,
+                temperature=0.0,
+            )
+            segments = filter_segments(segments)
             probability = "forced"
         else:
             print(f"Detected language '{info.language}' with probability {info.language_probability}")
             probability = info.language_probability
-        
+
         file_dir, new_file_name = get_renamed_file_dir_and_name(file_path)
-        # Write the transcription to the markdown file
+
         with open(output_file, 'w') as f:
             f.write(f"- ![{new_file_name}](../assets/{new_file_name})\n")
             f.write(f"- _metadata_\n")
@@ -88,11 +133,11 @@ def transcribe_audio(file_path, output_file):
             f.write(f"    - Model: {model_size}\n")
             f.write(f"- #unprocessed\n")
             f.write(f"-\n")
-            
             f.write("- ")
             for segment in segments:
                 line = f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}\n"
                 f.write(line)
+
     except Exception as e:
         print(f"Error transcribing {file_path}: {e}")
 
